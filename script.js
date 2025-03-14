@@ -101,7 +101,7 @@ const handleFormSubmit = (e) => {
     chatsContainer.appendChild(botMsgDiv);
     scrollToBottom();
     
-    generateResponse(botMsgDiv); // ✅ Pass actual DOM element, not HTML string
+    generateResponse(botMsgDiv); // Pass actual DOM element, not HTML string
   }, 600);
 };
 
