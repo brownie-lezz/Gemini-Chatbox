@@ -40,8 +40,8 @@ cancelFileBtn.addEventListener("click", () => {
 const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
-let userMessage = "";
 const chatHistory = [];
+const userData = { message: "", file: {} };
 
 // Function to create message elements
 const createMsgElement = (content, ...classes) => {
@@ -51,14 +51,37 @@ const createMsgElement = (content, ...classes) => {
     return div;
 };
 
-// Function to send user input to API and get a response
-const generateResponse = async (botMsgDiv) => {
+// Function to convert file to Base64
+const convertFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]); // Extract base64 content
+        reader.onerror = (error) => reject(error);
+    });
+};
+
+// Function to send user input and file to API
+const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
     const textElement = botMsgDiv.querySelector(".message-text");
     textElement.textContent = "Thinking...";
 
+    let parts = [];
+    if (userMessage) {
+        parts.push({ text: userMessage });
+    }
+    if (fileData) {
+        parts.push({
+            inline_data: {
+                mime_type: fileType,
+                data: fileData
+            }
+        });
+    }
+
     chatHistory.push({
         role: "user",
-        parts: [{ text: userMessage }]
+        parts: parts
     });
 
     try {
@@ -80,16 +103,23 @@ const generateResponse = async (botMsgDiv) => {
 };
 
 // Handle form submission
-const handleFormSubmit = (e) => {
+const handleFormSubmit = async (e) => {
     e.preventDefault();
-    userMessage = promptInput.value.trim();
-    if (!userMessage && fileInput.files.length === 0) return;
+    const userMessage = promptInput.value.trim();
+    const file = fileInput.files[0];
+
+    if (!userMessage && !file) return;
 
     promptInput.value = "";
+    userData.message = userMessage;
 
-    if (fileInput.files.length > 0) {
-        const fileName = fileInput.files[0].name;
-        const fileMsgHTML = `<p class="message-text">Uploaded file: ${fileName}</p>`;
+    let fileData = null;
+    let fileType = null;
+
+    if (file) {
+        fileType = file.type;
+        fileData = await convertFileToBase64(file);
+        const fileMsgHTML = `<p class="message-text">Uploaded file: ${file.name}</p>`;
         chatsContainer.appendChild(createMsgElement(fileMsgHTML, "user-message"));
         fileInput.value = "";
         fileLabel.textContent = "No file selected";
@@ -108,7 +138,7 @@ const handleFormSubmit = (e) => {
         `;
         const botMsgDiv = createMsgElement(botThinkingHTML, "bot-message");
         chatsContainer.appendChild(botMsgDiv);
-        generateResponse(botMsgDiv);
+        generateResponse(botMsgDiv, userMessage, fileData, fileType);
     }, 600);
 };
 
