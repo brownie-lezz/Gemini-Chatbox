@@ -14,7 +14,6 @@ cancelFileBtn.textContent = "✖";
 cancelFileBtn.style.display = "none";
 fileContainer.appendChild(fileLabel);
 fileContainer.appendChild(cancelFileBtn);
-fileContainer.style.marginTop = "10px";
 promptForm.appendChild(fileContainer);
 
 document.getElementById("add-file-btn").addEventListener("click", () => {
