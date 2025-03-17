@@ -5,6 +5,7 @@ const fileInput = document.createElement("input");
 const fileLabel = document.createElement("span");
 const cancelFileBtn = document.createElement("button");
 const fileContainer = document.createElement("div");
+const stopRespondBtn = document.getElementById("stop-respond-btn");
 
 // Configure file input
 fileInput.type = "file";
@@ -12,6 +13,7 @@ fileInput.style.display = "none";
 fileLabel.textContent = "No file selected";
 cancelFileBtn.textContent = "✖";
 cancelFileBtn.style.display = "none";
+
 fileContainer.appendChild(fileLabel);
 fileContainer.appendChild(cancelFileBtn);
 promptForm.appendChild(fileContainer);
@@ -31,18 +33,18 @@ fileInput.addEventListener("change", () => {
 });
 
 cancelFileBtn.addEventListener("click", () => {
-    fileInput.value = ""; // Clear file input
+    fileInput.value = "";
     fileLabel.textContent = "No file selected";
     cancelFileBtn.style.display = "none";
 });
 
 // API setup
-const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
+const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";  // Replace with your actual API key
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
-let userMessage = "";
+let controller;
+let typingInterval;
 const chatHistory = [];
-const userData = { message: "", file: {} };
 
 // Function to create message elements
 const createMsgElement = (content, ...classes) => {
@@ -61,7 +63,6 @@ const typingEffect = (text, textElement, botMsgDiv) => {
     const words = text.split(" ");
     let wordIndex = 0;
 
-    // Set interval to type each word
     typingInterval = setInterval(() => {
         if (wordIndex < words.length) {
             textElement.textContent += (wordIndex === 0 ? "" : " ") + words[wordIndex++];
@@ -88,9 +89,23 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
     const textElement = botMsgDiv.querySelector(".message-text");
     textElement.textContent = "Thinking...";
 
+    // Create a new AbortController for each request
+    controller = new AbortController();
+
+    // Prepare message parts for API
+    const messageParts = [{ text: userMessage }];
+    if (fileData && fileType) {
+        messageParts.push({
+            inlineData: {
+                mimeType: fileType,
+                data: fileData
+            }
+        });
+    }
+
     chatHistory.push({
         role: "user",
-        parts: parts
+        parts: messageParts
     });
 
     try {
@@ -107,7 +122,7 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
         const responseText = data.candidates[0].content.parts[0]?.text || "I'm not sure how to respond.";
         typingEffect(responseText, textElement, botMsgDiv);
     } catch (error) {
-        if (error.name === 'AbortError') {
+        if (error.name === "AbortError") {
             textElement.textContent = "Response stopped.";
         } else {
             console.error("Error:", error);
@@ -125,7 +140,6 @@ const handleFormSubmit = async (e) => {
     if (!userMessage && !file) return;
 
     promptInput.value = "";
-    userData.message = userMessage;
 
     let fileData = null;
     let fileType = null;
@@ -160,16 +174,16 @@ const handleFormSubmit = async (e) => {
 const handleStopRespondClick = () => {
     if (controller) {
         controller.abort(); // Abort the fetch request
-        clearInterval(typingInterval); // Clear typing interval
-/*
-        // Show "stop responding" message
-        const stopMsgHTML = `<p class="message-text">Stop responding</p>`;
+        clearInterval(typingInterval); // Clear typing effect interval
+
+        // Show "Response stopped" message
+        const stopMsgHTML = `<p class="message-text">Response stopped.</p>`;
         chatsContainer.appendChild(createMsgElement(stopMsgHTML, "system-message"));
-        scrollToBottom();*/
+        scrollToBottom();
     }
 };
 
 // Add event listener for stop respond button
-document.getElementById("stop-respond-btn").addEventListener("click", handleStopRespondClick);
+stopRespondBtn.addEventListener("click", handleStopRespondClick);
 
 promptForm.addEventListener("submit", handleFormSubmit);
