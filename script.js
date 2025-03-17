@@ -40,6 +40,7 @@ cancelFileBtn.addEventListener("click", () => {
 const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
+let userMessage = "";
 const chatHistory = [];
 const userData = { message: "", file: {} };
 
@@ -49,6 +50,27 @@ const createMsgElement = (content, ...classes) => {
     div.classList.add("message", ...classes);
     div.innerHTML = content;
     return div;
+};
+
+// Function to scroll to the bottom of chat
+const scrollToBottom = () => chatsContainer.scrollTo({ top: chatsContainer.scrollHeight, behavior: "smooth" });
+
+// Typing effect for bot responses
+const typingEffect = (text, textElement, botMsgDiv) => {
+    textElement.textContent = "";
+    const words = text.split(" ");
+    let wordIndex = 0;
+
+    // Set interval to type each word
+    typingInterval = setInterval(() => {
+        if (wordIndex < words.length) {
+            textElement.textContent += (wordIndex === 0 ? "" : " ") + words[wordIndex++];
+            botMsgDiv.classList.remove("loading");
+            scrollToBottom();
+        } else {
+            clearInterval(typingInterval);
+        }
+    }, 40);
 };
 
 // Function to convert file to Base64
@@ -66,19 +88,6 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
     const textElement = botMsgDiv.querySelector(".message-text");
     textElement.textContent = "Thinking...";
 
-    let parts = [];
-    if (userMessage) {
-        parts.push({ text: userMessage });
-    }
-    if (fileData) {
-        parts.push({
-            inline_data: {
-                mime_type: fileType,
-                data: fileData
-            }
-        });
-    }
-
     chatHistory.push({
         role: "user",
         parts: parts
@@ -88,17 +97,22 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
         const response = await fetch(API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: chatHistory })
+            body: JSON.stringify({ contents: chatHistory }),
+            signal: controller.signal // Attach the signal to the fetch request
         });
 
         const data = await response.json();
         if (!response.ok || !data?.candidates?.length) throw new Error(data?.error?.message || "Invalid response");
 
         const responseText = data.candidates[0].content.parts[0]?.text || "I'm not sure how to respond.";
-        textElement.textContent = responseText;
+        typingEffect(responseText, textElement, botMsgDiv);
     } catch (error) {
-        console.error("Error:", error);
-        textElement.textContent = "An error occurred. Please try again.";
+        if (error.name === 'AbortError') {
+            textElement.textContent = "Response stopped.";
+        } else {
+            console.error("Error:", error);
+            textElement.textContent = "An error occurred. Please try again.";
+        }
     }
 };
 
@@ -141,5 +155,21 @@ const handleFormSubmit = async (e) => {
         generateResponse(botMsgDiv, userMessage, fileData, fileType);
     }, 600);
 };
+
+// Handle stop respond button click
+const handleStopRespondClick = () => {
+    if (controller) {
+        controller.abort(); // Abort the fetch request
+        clearInterval(typingInterval); // Clear typing interval
+/*
+        // Show "stop responding" message
+        const stopMsgHTML = `<p class="message-text">Stop responding</p>`;
+        chatsContainer.appendChild(createMsgElement(stopMsgHTML, "system-message"));
+        scrollToBottom();*/
+    }
+};
+
+// Add event listener for stop respond button
+document.getElementById("stop-respond-btn").addEventListener("click", handleStopRespondClick);
 
 promptForm.addEventListener("submit", handleFormSubmit);
