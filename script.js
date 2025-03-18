@@ -13,7 +13,6 @@ fileInput.style.display = "none";
 fileLabel.textContent = "No file selected";
 cancelFileBtn.textContent = "✖";
 cancelFileBtn.style.display = "none";
-
 fileContainer.appendChild(fileLabel);
 fileContainer.appendChild(cancelFileBtn);
 promptForm.appendChild(fileContainer);
@@ -33,13 +32,13 @@ fileInput.addEventListener("change", () => {
 });
 
 cancelFileBtn.addEventListener("click", () => {
-    fileInput.value = "";
+    fileInput.value = ""; // Clear file input
     fileLabel.textContent = "No file selected";
     cancelFileBtn.style.display = "none";
 });
 
 // API setup
-const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";  // Replace with your actual API key
+const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
 let controller;
@@ -185,5 +184,14 @@ const handleStopRespondClick = () => {
 
 // Add event listener for stop respond button
 stopRespondBtn.addEventListener("click", handleStopRespondClick);
+
+// Add event listener for suggestion items
+document.querySelectorAll('.suggestions-item').forEach(item => {
+    item.addEventListener('click', () => {
+        const suggestionText = item.querySelector('.text').textContent;
+        promptInput.value = suggestionText;
+        promptForm.dispatchEvent(new Event('submit'));
+    });
+});
 
 promptForm.addEventListener("submit", handleFormSubmit);
