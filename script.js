@@ -40,6 +40,8 @@ cancelFileBtn.addEventListener("click", () => {
 // API setup
 const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+const WEATHER_API_KEY = "3fbc5802ca1dce806ed5ca4066eb20d3"; // Replace with your actual API key
+const WEATHER_API_URL = `https://api.openweathermap.org/data/2.5/weather?appid=${WEATHER_API_KEY}&units=metric&q=`;
 
 let controller;
 let typingInterval;
@@ -83,6 +85,21 @@ const convertFileToBase64 = (file) => {
     });
 };
 
+// Function to fetch weather information
+const fetchWeather = async (city) => {
+    try {
+        const response = await fetch(`${WEATHER_API_URL}${city}`);
+        const data = await response.json();
+        if (data.cod !== 200) throw new Error(data.message);
+
+        const weatherInfo = `Weather in ${data.name}: ${data.weather[0].description}, Temperature: ${data.main.temp}°C, Humidity: ${data.main.humidity}%`;
+        return weatherInfo;
+    } catch (error) {
+        console.error("Weather API Error:", error);
+        return "Unable to fetch weather information. Please type the sentence following the format: 'Weather in <city>'. Make sure that your sentence is end with the city name.";
+    }
+};
+
 // Function to send user input and file to API
 const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
     const textElement = botMsgDiv.querySelector(".message-text");
@@ -90,6 +107,26 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
 
     // Create a new AbortController for each request
     controller = new AbortController();
+
+    // Check if the user message is a weather request
+   /* if (userMessage.toLowerCase().startsWith("weather in") or userMessage.toLowerCase().startsWith("weather at")) {
+        const city = userMessage.split("weather in")[1].trim();
+        const weatherInfo = await fetchWeather(city);
+        typingEffect(weatherInfo, textElement, botMsgDiv);
+        return;
+    }*/
+
+        if (/weather|current weather|forecast/i.test(userMessage)) {
+            const match = userMessage.match(/(?:weather|current weather|forecast)\s*(?:in|at|of)?\s*(.+)/i);
+            
+            if (match && match[1]) {
+                const city = match[1].trim();
+                const weatherInfo = await fetchWeather(city);
+                typingEffect(weatherInfo, textElement, botMsgDiv);
+                return;
+            }
+        }
+        
 
     // Prepare message parts for API
     const messageParts = [{ text: userMessage }];
