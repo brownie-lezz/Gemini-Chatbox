@@ -40,8 +40,7 @@ cancelFileBtn.addEventListener("click", () => {
 // API setup
 const API_KEY = "AIzaSyBZsI6GD__wQdetknVZBrA6fCBeQScQaQM";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
-const WEATHER_API_KEY = "3fbc5802ca1dce806ed5ca4066eb20d3"; // Replace with your actual API key
-const WEATHER_API_URL = `https://api.openweathermap.org/data/2.5/weather?appid=${WEATHER_API_KEY}&units=metric&q=`;
+const WEA THER_API_KEY = "a09546a6e2ed42a2a4164904241204"; // Replace with your actual API key
 
 let controller;
 let typingInterval;
@@ -55,13 +54,14 @@ const createMsgElement = (content, ...classes) => {
     return div;
 };
 
+
 // Function to scroll to the bottom of chat
 const scrollToBottom = () => chatsContainer.scrollTo({ top: chatsContainer.scrollHeight, behavior: "smooth" });
 
 // Typing effect for bot responses
 const typingEffect = (text, textElement, botMsgDiv) => {
     textElement.textContent = "";
-    const words = text.split(" ");
+    const words = text.split(" ")
     let wordIndex = 0;
 
     typingInterval = setInterval(() => {
@@ -85,20 +85,125 @@ const convertFileToBase64 = (file) => {
     });
 };
 
-// Function to fetch weather information
-const fetchWeather = async (city) => {
-    try {
-        const response = await fetch(`${WEATHER_API_URL}${city}`);
-        const data = await response.json();
-        if (data.cod !== 200) throw new Error(data.message);
-
-        const weatherInfo = `Weather in ${data.name}: ${data.weather[0].description}, Temperature: ${data.main.temp}°C, Humidity: ${data.main.humidity}%`;
-        return weatherInfo;
-    } catch (error) {
-        console.error("Weather API Error:", error);
-        return "Unable to fetch weather information. Please type the sentence following the format: 'Weather in <city>'. Make sure that your sentence is end with the city name.";
+// Define a function that the model can call to control smart lights
+const currentWeatherFunctionDeclarations = {
+    name: 'get_current_weather',
+    description: 'Get the current temperature of a particular city.',
+    parameters: {
+      type: 'object', // use plain strings
+      properties: {
+        city: {
+          type: 'string',
+          description: 'City name, state code, or country code (e.g., "London", "US", "New York, US")'
+        }
+      },
+      required: ['city']
     }
-};
+  };
+
+  const forecastWeatherFunctionDeclarations = {
+    name: 'get_forecast_weather',  // Fixed typo: "weahther" to "weather"
+    description: 'Get the forecast weather of a city on up to 3 days',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: {
+          type: 'string',
+          description: 'City name, state code, or country code (e.g., "London", "US", "New York, US")'
+        },
+        day: {
+          type: 'integer',
+          description: 'The number of days for which the user has requested the weather forecast, starting from today. For example, if the user requests a forecast for 3 days, the forecast will include the weather for today, the next day, and the day after that'
+        }
+      },
+      required: ['city', 'day']
+    }
+  };
+
+  async function get_current_weather(city) {
+    try {
+      const weatherRes = await fetch(
+        `http://api.weatherapi.com/v1/current.json?q=${city}&key=${WEATHER_API_KEY}`
+      );
+      if (!weatherRes.ok) throw new Error("City not found");
+      const weatherData = await weatherRes.json();
+  
+      const temperature = weatherData.current.temp_c;
+      const description = weatherData.current.condition.text;
+      const humidity = weatherData.current.humidity
+      const localTime = weatherData.location.localtime
+
+      console.log(temperature, description, humidity, localTime)
+      
+      const modelRes = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            contents: { parts: [{text: `city:${city}, temperature:${temperature}, description:${description}, humidity:${humidity}, localTime:${localTime}`}]},
+            systemInstruction: { 
+                parts:[{
+                    text: "You will be given details of weather of a particular city including the city name, temperature in celcius, description (e.g. clear, rain), humidity and the local time. Your task is to return a short, friendly message summarizing the current weather, given in a natural, readable format"
+                }], 
+                role: "system"}
+        }),
+        signal: controller.signal,
+      })
+      const modelReturnData = await modelRes.json()
+      if (!modelRes.ok) throw new Error("Model response failed");
+
+      return modelReturnData.candidates[0].content.parts[0].text;
+    } catch (error) {
+      return `Could not retrieve weather for ${city}. Error: ${error.message}`;
+    }
+  }
+
+  async function get_forecast_weather(city, day) {
+    try {
+        const weatherRes = await fetch(
+          `http://api.weatherapi.com/v1/forecast.json?q=${city}&days=${day}&key=${WEATHER_API_KEY}`
+        );
+        if (!weatherRes.ok) throw new Error("City not found");
+        const weatherData = await weatherRes.json();
+        const dayArray = {}
+        for (const forecastDay of weatherData.forecast.forecastday) {
+            const dayObject = {
+              date: forecastDay.date,
+              condition: forecastDay.day.condition.text,  // Correct access to condition
+              humidity: forecastDay.day.avghumidity,      // Correct access to humidity
+              temperature: forecastDay.day.avgtemp_c      // Correct access to temperature
+            };
+            dayArray[forecastDay.date] = dayObject;  // Use the date as the key
+          }
+      
+          // Generate a list of summaries for all days
+          const weatherSummaries = weatherData.forecast.forecastday.map((day) => {
+            return `On ${day.date}, the weather will be ${day.day.condition.text} with a temperature of ${day.day.avgtemp_c}°C and a humidity of ${day.day.avghumidity}%.`;
+          });
+      
+          // Join the summaries into one string or just pass the array as-is
+          const combinedSummary = weatherSummaries.join(" ");
+        
+        const modelRes = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+              contents: { parts: [{text: combinedSummary}]},
+              systemInstruction: { 
+                parts:[{
+                    text: "You will be provided with forecast weather data for a range of date. This data will include the city name, condition, humidity and temperature. Your task is to generate a short, friendly message summarizing the weather for that specific day in a natural, easy-to-understand format.Make the message concise, engaging, and easy to understand for the user."
+                }], 
+                role: "system"}
+          }),
+          signal: controller.signal,
+        })
+        const modelReturnData = await modelRes.json()
+        if (!modelRes.ok) throw new Error("Model response failed");
+  
+        return modelReturnData.candidates[0].content.parts[0].text;
+      } catch (error) {
+        return `Could not retrieve weather for ${city}. Error: ${error.message}`;
+      }
+  }
 
 // Function to send user input and file to API
 const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
@@ -107,26 +212,6 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
 
     // Create a new AbortController for each request
     controller = new AbortController();
-
-    // Check if the user message is a weather request
-   /* if (userMessage.toLowerCase().startsWith("weather in") or userMessage.toLowerCase().startsWith("weather at")) {
-        const city = userMessage.split("weather in")[1].trim();
-        const weatherInfo = await fetchWeather(city);
-        typingEffect(weatherInfo, textElement, botMsgDiv);
-        return;
-    }*/
-
-        if (/weather|current weather|forecast/i.test(userMessage)) {
-            const match = userMessage.match(/(?:weather|current weather|forecast)\s*(?:in|at|of)?\s*(.+)/i);
-            
-            if (match && match[1]) {
-                const city = match[1].trim();
-                const weatherInfo = await fetchWeather(city);
-                typingEffect(weatherInfo, textElement, botMsgDiv);
-                return;
-            }
-        }
-        
 
     // Prepare message parts for API
     const messageParts = [{ text: userMessage }];
@@ -143,28 +228,78 @@ const generateResponse = async (botMsgDiv, userMessage, fileData, fileType) => {
         role: "user",
         parts: messageParts
     });
-
     try {
         const response = await fetch(API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: chatHistory }),
-            signal: controller.signal // Attach the signal to the fetch request
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            contents: chatHistory,
+            tools: [
+              {
+                functionDeclarations: [currentWeatherFunctionDeclarations, forecastWeatherFunctionDeclarations],
+              },
+            ],
+            systemInstruction: { 
+                parts:[{
+                    text: "You are a weather assistant. If the user asks about the current weather in any city, respond by calling the 'get_current_weather' function with the correct city name. Only call the function if the city is mentioned. Do not assume or make up weather information on your own. You are still able to answer user other kinds of questions that is not related to weather" 
+                }], 
+                role: "system"},
+          }),
+          signal: controller.signal,
         });
-
+      
         const data = await response.json();
         if (!response.ok || !data?.candidates?.length) throw new Error(data?.error?.message || "Invalid response");
-
-        const responseText = data.candidates[0].content.parts[0]?.text || "I'm not sure how to respond.";
-        typingEffect(responseText, textElement, botMsgDiv);
-    } catch (error) {
-        if (error.name === "AbortError") {
-            textElement.textContent = "Response stopped.";
-        } else {
-            console.error("Error:", error);
-            textElement.textContent = "An error occurred. Please try again.";
+      
+        // Loop through the parts
+        for (const part of data.candidates[0].content.parts) {
+          // 📌 Check if it's a functionCall
+          if (part.functionCall && part.functionCall.name === 'get_current_weather') {
+            console.log("Function get_current_weather was called");
+      
+            const city = part.functionCall.args?.city;
+            const result = await get_current_weather(city);
+      
+            const function_response_part = {
+              name: part.functionCall.name,
+              response: {result}
+            };
+      
+            chatHistory.push({ role: 'model', parts: [{ functionCall: part.functionCall }] });
+            chatHistory.push({ role: 'user', parts: [{ functionResponse: function_response_part }] });
+      
+            typingEffect(result, textElement, botMsgDiv);
+          } else if (part.functionCall && part.functionCall.name === 'get_forecast_weather') {
+            console.log("Function get_forecast_weather was called");
+      
+            const city = part.functionCall.args?.city;
+            const day = part.functionCall.args?.day
+            const result = await get_forecast_weather(city, day);
+      
+            const function_response_part = {
+              name: part.functionCall.name,
+              response: {result}
+            };
+      
+            chatHistory.push({ role: 'model', parts: [{ functionCall: part.functionCall }] });
+            chatHistory.push({ role: 'user', parts: [{ functionResponse: function_response_part }] });
+      
+            typingEffect(result, textElement, botMsgDiv);
+          }
+      
+          // 📌 Handle generated text
+          if (part.text) {
+            console.log("Text generated");
+            chatHistory.push({ role: "model", parts: [{ text: part.text }] });
+            typingEffect(part.text, textElement, botMsgDiv);
+          }
         }
-    }
+      
+      } catch (err) {
+        console.error("Error:", err);
+        typingEffect(err.message, textElement, botMsgDiv)
+      }
+      
 };
 
 // Handle form submission
